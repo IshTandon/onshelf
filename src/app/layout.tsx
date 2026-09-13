@@ -11,6 +11,8 @@ const dmSans = DM_Sans({
   variable: "--font-dm-sans",
 });
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
   title: "OnShelf",
   description: "Shelf gap task list for store managers",
