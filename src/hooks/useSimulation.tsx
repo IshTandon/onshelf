@@ -17,11 +17,24 @@ import {
 } from "@/lib/classification";
 import { parseSeedFromUrl } from "@/lib/seed";
 import { getDefaultStartTs, getDayEndTs } from "@/lib/time";
+import { canWithdraw } from "@/lib/reversal";
 import type { Task, StoreData, ToastMessage } from "@/types";
+
+/** A resolution applies only from the moment it was made, not before it. */
+function resolvedBy(
+  entry: { resolvedTs?: number; openedTs: number },
+  currentTs: number
+): boolean {
+  return (entry.resolvedTs ?? entry.openedTs) <= currentTs;
+}
 
 type LifecycleEntry = {
   state: Task["state"];
   openedTs: number;
+  /** When the task was closed — a resolution must not apply before it happened. */
+  resolvedTs?: number;
+  /** System stock a correction replaced, so a withdrawal can restore it. */
+  priorStock?: number;
 };
 
 interface SimulationContextValue {
@@ -38,6 +51,16 @@ interface SimulationContextValue {
   setTime: (ts: number) => void;
   resolveRestocked: (taskId: string) => void;
   resolveNotFound: (taskId: string) => void;
+  withdrawCorrection: (key: string) => void;
+  history: {
+    key: string;
+    zoneId: string;
+    skuCode: string;
+    state: Task["state"];
+    resolvedTs: number;
+    priorStock?: number;
+    reversible: boolean;
+  }[];
   dismissWrongCall: (taskId: string) => void;
   toasts: ToastMessage[];
   dismissToast: (id: string) => void;
@@ -69,6 +92,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     for (const [key, entry] of lifecycle) {
       if (entry.state !== "open") {
         if (key.startsWith("facing-")) continue;
+        if ((entry.resolvedTs ?? entry.openedTs) > currentTs) continue;
         const [zoneId, skuCode] = key.split("::");
         resolvedTasks.push({
           id: `task-${zoneId}-${skuCode}`,
@@ -102,13 +126,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       .map((t) => {
         if (t.kind === "facing") {
           const entry = lifecycle.get(t.id);
-          if (entry && entry.state !== "open") return null;
+          if (entry && entry.state !== "open" && resolvedBy(entry, currentTs))
+            return null;
           return { ...t, openedTs: entry?.openedTs ?? t.openedTs };
         }
 
         const key = taskKey(t.zoneId, t.skuCode);
         const entry = lifecycle.get(key);
-        if (entry && entry.state !== "open") return null;
+        if (entry && entry.state !== "open" && resolvedBy(entry, currentTs))
+          return null;
 
         return { ...t, openedTs: entry?.openedTs ?? t.openedTs };
       })
@@ -188,7 +214,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const setTime = useCallback((ts: number) => setCurrentTs(ts), []);
 
   const applyOverride = useCallback(
-    (task: Task, state: Task["state"]) => {
+    (task: Task, state: Task["state"], priorStock?: number) => {
       const key =
         task.kind === "facing" ? task.id : taskKey(task.zoneId, task.skuCode);
       setExitingIds((prev) => new Set(prev).add(task.id));
@@ -199,6 +225,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
           next.set(key, {
             state,
             openedTs: entry?.openedTs ?? task.openedTs,
+            resolvedTs: currentTs,
+            priorStock: priorStock ?? entry?.priorStock,
           });
           return next;
         });
@@ -209,7 +237,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         });
       }, 300);
     },
-    []
+    [currentTs]
   );
 
   const resolveRestocked = useCallback(
@@ -225,6 +253,10 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       const task = tasks.find((t) => t.id === taskId);
       if (!task) return;
 
+      const priorStock = storeData.inventory.find(
+        (r) => r.zoneId === task.zoneId && r.skuCode === task.skuCode
+      )?.systemStock;
+
       if (task.kind !== "facing") {
         setStoreData((prev) => ({
           ...prev,
@@ -236,7 +268,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         }));
       }
 
-      applyOverride(task, "resolved_not_found");
+      applyOverride(task, "resolved_not_found", priorStock);
 
       addToast(
         `Stock set to 0. ₹${Math.round(task.valueAtRiskPerHour).toLocaleString("en-IN")}/hr at risk cleared. Store pickup will stop promising this item.`
@@ -260,6 +292,57 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const withdrawCorrection = useCallback(
+    (key: string) => {
+      const entry = lifecycle.get(key);
+      if (!entry || !canWithdraw(entry, currentTs)) return;
+
+      if (typeof entry.priorStock === "number") {
+        const [zoneId, skuCode] = key.split("::");
+        const restored = entry.priorStock;
+        setStoreData((prev) => ({
+          ...prev,
+          inventory: prev.inventory.map((r) =>
+            r.zoneId === zoneId && r.skuCode === skuCode
+              ? { ...r, systemStock: restored }
+              : r
+          ),
+        }));
+      }
+      // dropping the entry lets the shelf be reassessed, so the task reopens
+      // if the gap is still there
+      setLifecycle((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      addToast("Correction withdrawn. Stock restored and the online promise is back on.");
+    },
+    [lifecycle, currentTs, addToast]
+  );
+
+  const history = useMemo(
+    () =>
+      [...lifecycle.entries()]
+        .filter(
+          ([k, e]) =>
+            e.state !== "open" &&
+            !k.startsWith("facing-") &&
+            (e.resolvedTs ?? e.openedTs) <= currentTs
+        )
+        .map(([key, e]) => ({
+          key,
+          zoneId: key.split("::")[0],
+          skuCode: key.split("::")[1],
+          state: e.state,
+          resolvedTs: e.resolvedTs ?? e.openedTs,
+          priorStock: e.priorStock,
+          reversible: canWithdraw(e, currentTs),
+        }))
+        .sort((a, b) => b.resolvedTs - a.resolvedTs),
+    [lifecycle, currentTs]
+  );
+
   const value: SimulationContextValue = {
     currentTs,
     isPlaying,
@@ -274,6 +357,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setTime,
     resolveRestocked,
     resolveNotFound,
+    withdrawCorrection,
+    history,
     dismissWrongCall,
     toasts,
     dismissToast,
