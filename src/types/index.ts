@@ -38,6 +38,12 @@ export type InventoryRow = {
   lastSaleTs: number | null;
 };
 
+export type SaleEvent = {
+  zoneId: string;
+  skuCode: string;
+  ts: number;
+};
+
 export type TaskKind =
   | "true_oos"
   | "phantom_suspected"
@@ -75,6 +81,7 @@ export type StoreData = {
   heartbeats: CameraHeartbeat[];
   staffEvents: StaffPresent[];
   inventory: InventoryRow[];
+  sales: SaleEvent[];
   lowConfidenceZones: string[];
 };
 

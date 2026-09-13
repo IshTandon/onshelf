@@ -190,7 +190,13 @@ function buildInventory(zones: ShelfZone[]): InventoryRow[] {
       if (zone.id === "A3-L2" && sku.code === "ATT-003") {
         systemStock = 40;
         hourlyVelocity = 8;
-        lastSaleTs = hourToTs(9, 10);
+        // Last sale well before the 09:14 gap — no recent sales at 09:20
+        lastSaleTs = hourToTs(8, 30);
+      }
+      if (zone.id === "A3-L2" && sku.code === "ATT-004") {
+        systemStock = 15;
+        hourlyVelocity = 2;
+        lastSaleTs = hourToTs(8, 20);
       }
       if (zone.id === "A4-L1" && sku.code === "RIC-001") {
         systemStock = 12;
@@ -247,12 +253,13 @@ function getScriptedGaps(): ScriptedGap[] {
       gapRatio: 0.85,
     },
     // 15:10 facing false positive — gap but sales ticking
+    // Start early enough that 3+ gap checks land before 15:10
     {
       zoneId: "A5-L1",
       skuCode: "BEV-001",
-      startTs: hourToTs(14, 58),
+      startTs: hourToTs(14, 40),
       endTs: hourToTs(16, 0),
-      gapRatio: 0.72,
+      gapRatio: 0.78,
     },
     // 17:45 peak tasks
     {
@@ -382,16 +389,17 @@ function generateSignals(
       const camZones = zones.filter((z) => z.cameraId === camId && z.covered);
 
       for (const zone of camZones) {
-        // Random signal drop
-        if (rng.chance(dropRate)) continue;
-        if (status === "offline") continue;
-
         const scripted = scriptedGaps.find(
           (g) =>
             g.zoneId === zone.id &&
             checkTs >= g.startTs &&
             checkTs < g.endTs
         );
+
+        // Random signal drop — consume RNG always, but never drop scripted events
+        const dropped = rng.chance(dropRate);
+        if (!scripted && dropped) continue;
+        if (status === "offline") continue;
 
         let gapRatio: number;
         if (scripted) {
@@ -448,8 +456,25 @@ function applyScriptedSales(inventory: InventoryRow[]): InventoryRow[] {
   return inv;
 }
 
+export function getLastSaleTs(
+  sales: { zoneId: string; skuCode: string; ts: number }[],
+  zoneId: string,
+  skuCode: string,
+  currentTs: number,
+  fallback: number | null = null
+): number | null {
+  const past = sales
+    .filter(
+      (s) =>
+        s.zoneId === zoneId && s.skuCode === skuCode && s.ts <= currentTs
+    )
+    .sort((a, b) => b.ts - a.ts);
+  return past[0]?.ts ?? fallback;
+}
+
 export function generateStoreData(seed: number): StoreData {
   const zones = buildZones();
+  const sales = getScriptedSales();
   const inventory = applyScriptedSales(buildInventory(zones));
   const { signals, heartbeats } = generateSignals(zones, seed);
 
@@ -459,6 +484,7 @@ export function generateStoreData(seed: number): StoreData {
     heartbeats,
     staffEvents: [],
     inventory,
+    sales,
     lowConfidenceZones: LOW_CONFIDENCE_ZONES,
   };
 }

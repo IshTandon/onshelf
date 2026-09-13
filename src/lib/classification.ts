@@ -10,7 +10,13 @@ import type {
   StoreData,
 } from "@/types";
 import { isReplenishmentWindow } from "./time";
-import { getSku, getZone, getInventoryRow, getCameraStatusAtTs } from "./generator";
+import {
+  getSku,
+  getZone,
+  getInventoryRow,
+  getCameraStatusAtTs,
+  getLastSaleTs,
+} from "./generator";
 
 const WINDOW_MS = 15 * 60 * 1000;
 const GAP_THRESHOLD = 0.6;
@@ -103,11 +109,21 @@ function hasNoGapForDuration(
 
 function hasRecentSale(
   inv: InventoryRow | undefined,
+  sales: StoreData["sales"],
   currentTs: number,
   windowMs: number
 ): boolean {
-  if (!inv?.lastSaleTs) return false;
-  return currentTs - inv.lastSaleTs <= windowMs;
+  if (!inv) return false;
+  const lastSale = getLastSaleTs(
+    sales,
+    inv.zoneId,
+    inv.skuCode,
+    currentTs,
+    inv.lastSaleTs
+  );
+  if (!lastSale) return false;
+  const elapsed = currentTs - lastSale;
+  return elapsed >= 0 && elapsed <= windowMs;
 }
 
 function isStaffPresent(
@@ -126,14 +142,15 @@ function classifyKind(
   inv: InventoryRow | undefined,
   signals: ShelfGapSignal[],
   zoneId: string,
-  currentTs: number
+  currentTs: number,
+  sales: StoreData["sales"]
 ): TaskKind | null {
   if (!sustained) {
     // reverse_phantom
     if (
       systemStock === 0 &&
       hasNoGapForDuration(signals, zoneId, currentTs, REVERSE_PHANTOM_NO_GAP_MS) &&
-      hasRecentSale(inv, currentTs, REVERSE_PHANTOM_SALE_MS)
+      hasRecentSale(inv, sales, currentTs, REVERSE_PHANTOM_SALE_MS)
     ) {
       return "reverse_phantom";
     }
@@ -142,7 +159,8 @@ function classifyKind(
 
   if (systemStock === 0) return "true_oos";
 
-  if (hasRecentSale(inv, currentTs, FACING_SALE_MS)) {
+  // Facing only when sales are actively ticking — stale sales mean backroom phantom
+  if (hasRecentSale(inv, sales, currentTs, FACING_SALE_MS)) {
     return "facing";
   }
 
@@ -200,7 +218,8 @@ export interface ClassifyInput {
 
 export function classifyTasks(input: ClassifyInput): Task[] {
   const { storeData, currentTs, existingTasks } = input;
-  const { zones, signals, heartbeats, staffEvents, inventory } = storeData;
+  const { zones, signals, heartbeats, staffEvents, inventory, sales } =
+    storeData;
 
   const resolvedKeys = new Set(
     existingTasks
@@ -286,7 +305,8 @@ export function classifyTasks(input: ClassifyInput): Task[] {
         inv,
         signals,
         zone.id,
-        currentTs
+        currentTs,
+        sales
       );
 
       if (!kind) continue;
