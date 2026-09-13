@@ -3,6 +3,7 @@
 import { ClockScrubber } from "@/components/ClockScrubber";
 import { TaskRow } from "@/components/TaskRow";
 import { UncoveredStrip } from "@/components/UncoveredStrip";
+import { TaskHistory } from "@/components/TaskHistory";
 import { useSimulation } from "@/hooks/useSimulation";
 import { formatRupee } from "@/lib/classification";
 import { nextCheckTs, tsToClock } from "@/lib/time";
@@ -41,6 +42,8 @@ export default function GapsPage() {
           ))}
         </section>
       )}
+
+      <TaskHistory />
     </div>
   );
 }

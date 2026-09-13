@@ -43,18 +43,29 @@ export function NotInBackroomSheet({ task, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/30">
       <div className="bg-white w-full max-w-lg border-t border-neutral-200 p-5 pb-8">
-        <p className="text-base font-medium">Not in backroom</p>
+        <p className="text-base font-medium">Raise stock correction</p>
         <p className="text-xs text-neutral-400 mt-0.5 mb-4">
           {zone?.aisle} · {sku?.name}
         </p>
 
         <div className="border border-neutral-200 p-3 mb-4 text-sm text-neutral-600 leading-snug">
           <p>
-            System stock will be set to <strong>0</strong> (currently{" "}
-            {task.evidence.systemStock}).
+            Raises a cycle-count adjustment for this shelf position, proposing
+            system stock{" "}
+            <strong className="tabular-nums">
+              {task.evidence.systemStock} &rarr; 0
+            </strong>
+            . Zero on hand is the only value this role can propose.
           </p>
           <p className="mt-2 text-neutral-900">
-            Store pickup will stop promising this item.
+            Store pickup stops promising this item immediately. The suspension
+            auto-expires after four hours unless the adjustment is accepted.
+          </p>
+          <p className="mt-2 text-[11px] text-neutral-400">
+            Prototype: the adjustment is auto-accepted here so the effect is
+            visible. In production the ledger moves only once it is approved on
+            the path a manual count already uses. Withdrawable for four hours
+            from Task history.
           </p>
         </div>
 
@@ -77,7 +88,7 @@ export function NotInBackroomSheet({ task, onClose }: Props) {
             }}
             className="flex-1 py-3.5 text-sm font-medium border border-neutral-900 active:bg-neutral-50"
           >
-            Set stock to 0
+            Raise adjustment
           </button>
         </div>
       </div>
