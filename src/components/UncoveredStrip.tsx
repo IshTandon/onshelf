@@ -14,21 +14,18 @@ export function UncoveredStrip() {
   const aisles = [...new Set(uncovered.map((z) => z.aisle))];
 
   return (
-    <div className="border-b border-neutral-200 bg-neutral-50">
+    <div className="border-b border-neutral-200">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 text-left text-sm text-neutral-600"
+        className="w-full px-4 py-2 text-left text-[11px] text-neutral-400"
       >
-        <span className="font-medium">No camera coverage</span>
-        <span className="text-neutral-400"> — {aisles.join(", ")}</span>
-        <span className="float-right text-neutral-400">{expanded ? "▾" : "▸"}</span>
+        No camera sees {aisles.join(", ")}
+        <span className="ml-1">{expanded ? "▾" : "▸"}</span>
       </button>
       {expanded && (
-        <div className="px-4 pb-3 text-sm text-neutral-500">
+        <div className="px-4 pb-2 text-[11px] text-neutral-400">
           {uncovered.map((z) => (
-            <p key={z.id}>
-              {z.aisle} · {z.section}
-            </p>
+            <p key={z.id}>{z.aisle} · {z.section}</p>
           ))}
         </div>
       )}

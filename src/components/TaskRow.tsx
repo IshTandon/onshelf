@@ -30,23 +30,20 @@ export function TaskRow({ task, exiting }: Props) {
   const isPhantom = task.kind === "phantom_suspected";
   const isPredicted = task.mode === "predicted" || label === "Predicted";
   const mins = minutesOpen(task.openedTs, currentTs);
+  const statusLabel =
+    task.mode === "predicted" ? "Predicted, camera offline" : label;
 
-  const borderColor = isPredicted
-    ? "border-l-predicted"
-    : isPhantom
+  const accent =
+    isPhantom && !isPredicted
       ? "border-l-urgent"
-      : "border-l-transparent";
-
-  const bgColor = isPredicted
-    ? "bg-neutral-50"
-    : isPhantom
-      ? "bg-red-50/50"
-      : "";
+      : isPredicted
+        ? "border-l-predicted"
+        : "border-l-transparent";
 
   return (
     <>
-      <div
-        className={`border-b border-neutral-200 border-l-4 ${borderColor} ${bgColor} ${
+      <article
+        className={`border-b border-neutral-200 border-l-[3px] ${accent} ${
           exiting
             ? "animate-row-exit motion-reduce:animate-none opacity-0"
             : ""
@@ -54,77 +51,64 @@ export function TaskRow({ task, exiting }: Props) {
       >
         <Link
           href={`/evidence?id=${encodeURIComponent(task.id)}&zone=${task.zoneId}&sku=${task.skuCode}`}
-          className="block px-4 pt-4 pb-2"
+          className="block px-4 pt-3.5 pb-3"
         >
-          <div className="flex justify-between items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-lg font-medium leading-tight">
-                {zone?.aisle}
-              </p>
-              <p className="text-sm text-neutral-500">{zone?.section}</p>
-            </div>
-            <p className="text-lg font-medium tabular-nums shrink-0">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-xl font-medium leading-none">{zone?.aisle}</h2>
+            <p className="text-xl font-medium tabular-nums leading-none shrink-0">
               {formatRupee(task.valueAtRiskPerHour)}
-              <span className="text-xs text-neutral-400 font-normal">/hr</span>
+              <span className="text-[11px] font-normal text-neutral-400">
+                /hr
+              </span>
             </p>
           </div>
 
-          <p className="text-sm mt-2 text-neutral-800">
-            {sku?.name ?? task.skuCode}
-          </p>
-          <p className="text-sm text-neutral-600 mt-1">
-            {getDisagreementSentence(task, storeData.zones)}
+          <p className="text-[11px] text-neutral-400 mt-1">{zone?.section}</p>
+
+          <p className="text-xs text-neutral-500 mt-2.5 leading-snug">
+            {sku?.name ?? task.skuCode}. {getDisagreementSentence(task, storeData.zones)}
           </p>
 
-          <div className="flex items-center gap-3 mt-2 text-xs text-neutral-400">
-            <span>{mins}m open</span>
+          <p className="text-[11px] text-neutral-400 mt-2">
+            {mins}m open
+            <span className="mx-1.5">·</span>
+            <span className={isPredicted ? "text-predicted" : "text-neutral-400"}>
+              {statusLabel}
+            </span>
+            <span className="mx-1.5">·</span>
             <span
               className={
-                label === "Confirmed"
-                  ? "text-neutral-700"
-                  : label === "Likely"
-                    ? "text-muted"
-                    : "text-predicted"
+                isPhantom && !isPredicted
+                  ? "text-urgent"
+                  : "text-neutral-400"
               }
             >
-              {task.mode === "predicted" && label !== "Predicted"
-                ? "Predicted, camera offline"
-                : label}
+              {getTaskAction(task.kind)}
             </span>
-            {isPhantom && (
-              <span className="text-urgent font-medium ml-auto">
-                {getTaskAction(task.kind)}
-              </span>
-            )}
-            {!isPhantom && (
-              <span className="text-neutral-500 ml-auto">
-                {getTaskAction(task.kind)}
-              </span>
-            )}
-          </div>
+          </p>
         </Link>
 
-        <div className="flex gap-2 px-4 pb-4 pt-1">
+        <div className="flex border-t border-neutral-100">
           <button
             onClick={() => resolveRestocked(task.id)}
-            className="flex-1 py-2.5 text-sm font-medium bg-neutral-900 text-white rounded"
+            className="flex-1 py-3.5 text-sm font-medium border-r border-neutral-100 active:bg-neutral-50"
           >
             Restocked
           </button>
           <button
             onClick={() => setShowSheet(true)}
-            className="flex-1 py-2.5 text-sm font-medium border border-neutral-300 rounded"
+            className="flex-1 py-3.5 text-sm border-r border-neutral-100 active:bg-neutral-50"
           >
             Not in backroom
           </button>
           <button
             onClick={() => dismissWrongCall(task.id)}
-            className="flex-1 py-2.5 text-sm font-medium border border-neutral-200 text-neutral-500 rounded"
+            className="flex-1 py-3.5 text-sm text-neutral-400 active:bg-neutral-50"
           >
             Wrong call
           </button>
         </div>
-      </div>
+      </article>
 
       {showSheet && (
         <NotInBackroomSheet task={task} onClose={() => setShowSheet(false)} />

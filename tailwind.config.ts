@@ -12,9 +12,9 @@ const config: Config = {
         sans: ["var(--font-dm-sans)", "system-ui", "sans-serif"],
       },
       colors: {
-        urgent: "#C41E3A",
-        muted: "#6B7280",
-        predicted: "#9CA3AF",
+        urgent: "#B91C1C",
+        muted: "#737373",
+        predicted: "#A3A3A3",
       },
     },
   },

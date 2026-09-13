@@ -12,33 +12,26 @@ export default function GapsPage() {
   const nextCheck = nextCheckTs(currentTs);
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-lg mx-auto bg-white">
       <ClockScrubber />
 
-      <div className="px-4 py-3 border-b border-neutral-100">
-        <p className="text-sm text-neutral-600">
-          {openTasks.length === 0 ? (
-            <>
-              Nothing open. Next check at {tsToClock(nextCheck)}.
-            </>
-          ) : (
-            <>
-              <span className="font-medium text-neutral-900">
-                {openTasks.length} open
-              </span>
-              {" · "}
-              <span className="tabular-nums">
-                {formatRupee(totalAtRisk)}/hr at risk
-              </span>
-            </>
-          )}
-        </p>
-      </div>
+      <p className="px-4 py-2.5 text-xs text-neutral-500 border-b border-neutral-200">
+        {openTasks.length === 0 ? (
+          <>Nothing open. Next check at {tsToClock(nextCheck)}.</>
+        ) : (
+          <>
+            {openTasks.length} open ·{" "}
+            <span className="tabular-nums">
+              {formatRupee(totalAtRisk)}/hr at risk
+            </span>
+          </>
+        )}
+      </p>
 
       <UncoveredStrip />
 
       {openTasks.length > 0 && (
-        <div>
+        <section aria-label="Open gaps">
           {openTasks.map((task) => (
             <TaskRow
               key={task.id}
@@ -46,7 +39,7 @@ export default function GapsPage() {
               exiting={exitingIds.has(task.id)}
             />
           ))}
-        </div>
+        </section>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const tabs = [
   { href: "/", label: "Gaps" },
   { href: "/health", label: "Health" },
+  { href: "/regional", label: "Regional" },
 ];
 
 export function Nav() {
@@ -22,26 +23,14 @@ export function Nav() {
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex-1 py-3 text-center text-sm font-medium ${
-                active
-                  ? "text-neutral-900 border-t-2 border-neutral-900 -mt-px"
-                  : "text-neutral-400"
+              className={`flex-1 py-3 text-center text-xs ${
+                active ? "text-neutral-900 font-medium" : "text-neutral-400"
               }`}
             >
               {tab.label}
             </Link>
           );
         })}
-        <Link
-          href="/regional"
-          className={`flex-1 py-3 text-center text-sm font-medium ${
-            pathname === "/regional"
-              ? "text-neutral-900 border-t-2 border-neutral-900 -mt-px"
-              : "text-neutral-400"
-          }`}
-        >
-          Regional
-        </Link>
       </div>
     </nav>
   );

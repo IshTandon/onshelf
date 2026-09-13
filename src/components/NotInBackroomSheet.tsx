@@ -19,17 +19,19 @@ export function NotInBackroomSheet({ task, onClose }: Props) {
 
   if (confirmed) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-        <div className="bg-white w-full max-w-lg rounded-t-2xl p-6 pb-8">
-          <p className="text-lg font-medium mb-2">Stock updated</p>
-          <p className="text-neutral-600 mb-6">
+      <div className="fixed inset-0 z-50 flex items-end bg-black/30">
+        <div className="bg-white w-full max-w-lg border-t border-neutral-200 p-5 pb-8">
+          <p className="text-base font-medium mb-1">Stock updated</p>
+          <p className="text-sm text-neutral-500 mb-5 leading-snug">
             {sku?.name} set to 0 units.{" "}
-            {formatRupee(task.valueAtRiskPerHour)}/hr at risk cleared.
-            Store pickup will stop promising this item.
+            <span className="tabular-nums">
+              {formatRupee(task.valueAtRiskPerHour)}/hr
+            </span>{" "}
+            at risk cleared. Store pickup will stop promising this item.
           </p>
           <button
             onClick={onClose}
-            className="w-full py-3 bg-neutral-900 text-white font-medium rounded"
+            className="w-full py-3.5 text-sm font-medium border border-neutral-200 active:bg-neutral-50"
           >
             Done
           </button>
@@ -39,32 +41,32 @@ export function NotInBackroomSheet({ task, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-      <div className="bg-white w-full max-w-lg rounded-t-2xl p-6 pb-8">
-        <h2 className="text-lg font-medium mb-1">Not in backroom</h2>
-        <p className="text-sm text-neutral-500 mb-4">
+    <div className="fixed inset-0 z-50 flex items-end bg-black/30">
+      <div className="bg-white w-full max-w-lg border-t border-neutral-200 p-5 pb-8">
+        <p className="text-base font-medium">Not in backroom</p>
+        <p className="text-xs text-neutral-400 mt-0.5 mb-4">
           {zone?.aisle} · {sku?.name}
         </p>
 
-        <div className="bg-neutral-50 rounded-lg p-4 mb-4">
-          <p className="text-sm text-neutral-600 mb-3">
+        <div className="border border-neutral-200 p-3 mb-4 text-sm text-neutral-600 leading-snug">
+          <p>
             System stock will be set to <strong>0</strong> (currently{" "}
             {task.evidence.systemStock}).
           </p>
-          <p className="text-sm text-neutral-800 font-medium">
+          <p className="mt-2 text-neutral-900">
             Store pickup will stop promising this item.
           </p>
         </div>
 
-        <p className="text-sm text-neutral-500 mb-6">
-          This unblocks {formatRupee(task.valueAtRiskPerHour)}/hr in phantom
-          alerts for this SKU.
+        <p className="text-xs text-neutral-400 mb-5 tabular-nums">
+          Unblocks {formatRupee(task.valueAtRiskPerHour)}/hr in phantom alerts
+          for this SKU.
         </p>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 py-3 border border-neutral-300 rounded font-medium"
+            className="flex-1 py-3.5 text-sm border border-neutral-200 active:bg-neutral-50"
           >
             Cancel
           </button>
@@ -73,9 +75,9 @@ export function NotInBackroomSheet({ task, onClose }: Props) {
               resolveNotFound(task.id);
               setConfirmed(true);
             }}
-            className="flex-1 py-3 bg-neutral-900 text-white font-medium rounded"
+            className="flex-1 py-3.5 text-sm font-medium border border-neutral-900 active:bg-neutral-50"
           >
-            Confirm — set stock to 0
+            Set stock to 0
           </button>
         </div>
       </div>

@@ -7,19 +7,18 @@ export function ClockScrubber() {
   const { currentTs, isPlaying, play, pause, setTime, seed } = useSimulation();
   const dayStart = getDayStartTs();
   const dayEnd = getDayEndTs();
-  const progress = ((currentTs - dayStart) / (dayEnd - dayStart)) * 100;
 
   return (
-    <div className="sticky top-0 z-30 bg-white border-b border-neutral-200 px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-2xl font-medium tabular-nums tracking-tight">
+    <header className="sticky top-0 z-30 bg-white border-b border-neutral-200 px-4 py-2.5">
+      <div className="flex items-baseline justify-between mb-2">
+        <time className="text-xl font-medium tabular-nums">
           {tsToClock(currentTs)}
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400">seed {seed}</span>
+        </time>
+        <div className="flex items-baseline gap-3 text-xs text-neutral-400">
+          <span>seed {seed}</span>
           <button
             onClick={isPlaying ? pause : play}
-            className="px-3 py-1.5 text-sm font-medium bg-neutral-900 text-white rounded"
+            className="text-neutral-900 font-medium"
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? "Pause" : "Play"}
@@ -32,23 +31,21 @@ export function ClockScrubber() {
         max={dayEnd}
         value={currentTs}
         onChange={(e) => setTime(Number(e.target.value))}
-        className="w-full h-1.5 appearance-none bg-neutral-200 rounded-full cursor-pointer
+        className="w-full h-px appearance-none bg-neutral-300 cursor-pointer
           [&::-webkit-slider-thumb]:appearance-none
-          [&::-webkit-slider-thumb]:w-4
-          [&::-webkit-slider-thumb]:h-4
-          [&::-webkit-slider-thumb]:rounded-full
-          [&::-webkit-slider-thumb]:bg-neutral-900"
+          [&::-webkit-slider-thumb]:w-3
+          [&::-webkit-slider-thumb]:h-3
+          [&::-webkit-slider-thumb]:bg-neutral-900
+          [&::-moz-range-thumb]:w-3
+          [&::-moz-range-thumb]:h-3
+          [&::-moz-range-thumb]:border-0
+          [&::-moz-range-thumb]:bg-neutral-900"
         aria-label="Time scrubber"
       />
-      <div className="flex justify-between text-xs text-neutral-400 mt-1">
+      <div className="flex justify-between text-[10px] text-neutral-400 mt-1 tabular-nums">
         <span>06:00</span>
         <span>22:00</span>
       </div>
-      <div
-        className="absolute bottom-0 left-0 h-0.5 bg-neutral-900 transition-[width] duration-300 motion-reduce:transition-none"
-        style={{ width: `${progress}%` }}
-        aria-hidden
-      />
-    </div>
+    </header>
   );
 }

@@ -12,7 +12,8 @@ html {
 
 body {
   @apply bg-white text-neutral-900 antialiased;
-  font-feature-settings: "tnum";
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .safe-bottom {
