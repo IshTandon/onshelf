@@ -1,5 +1,13 @@
 import { createRng } from "./seed";
 import { hourToTs, getDayStartTs, getDayEndTs } from "./time";
+import {
+  CHECK_INTERVAL_MS,
+  LOW_CONFIDENCE_ZONES,
+  sampleConfidence,
+  sampleBackgroundGapRatio,
+  buildCameraSchedule,
+  sampleDropRate,
+} from "./signal-noise";
 import type {
   ShelfZone,
   ShelfGapSignal,
@@ -8,9 +16,6 @@ import type {
   InventoryRow,
   StoreData,
 } from "@/types";
-
-const CHECK_INTERVAL_MS = 3 * 60 * 1000;
-const SIGNAL_DROP_RATE = 0.08; // 5-12% range, seeded variation
 
 interface ScriptedGap {
   zoneId: string;
@@ -132,7 +137,6 @@ function buildZones(): ShelfZone[] {
         { code: "FRZ-002", name: "Amul Ice Cream 1L", mrp: 195, unitsPerFacing: 4 },
       ],
     },
-    // Low-confidence blind spots (bad camera angles)
     {
       id: "A6-L2",
       aisle: "Aisle 6",
@@ -153,7 +157,6 @@ function buildZones(): ShelfZone[] {
         { code: "CL-001", name: "Lizol 1L", mrp: 185, unitsPerFacing: 5 },
       ],
     },
-    // Uncovered zones
     {
       id: "A9-L1",
       aisle: "Aisle 9",
@@ -177,8 +180,6 @@ function buildZones(): ShelfZone[] {
   ];
 }
 
-const LOW_CONFIDENCE_ZONES = ["A6-L2", "A7-L2"];
-
 function buildInventory(zones: ShelfZone[]): InventoryRow[] {
   const rows: InventoryRow[] = [];
   for (const zone of zones) {
@@ -190,7 +191,6 @@ function buildInventory(zones: ShelfZone[]): InventoryRow[] {
       if (zone.id === "A3-L2" && sku.code === "ATT-003") {
         systemStock = 40;
         hourlyVelocity = 8;
-        // Last sale well before the 09:14 gap — no recent sales at 09:20
         lastSaleTs = hourToTs(8, 30);
       }
       if (zone.id === "A3-L2" && sku.code === "ATT-004") {
@@ -208,7 +208,6 @@ function buildInventory(zones: ShelfZone[]): InventoryRow[] {
         hourlyVelocity = 12;
         lastSaleTs = hourToTs(8, 50);
       }
-      // reverse_phantom candidate: system says 0 but item is on shelf
       if (zone.id === "A2-L1" && sku.code === "SNK-002") {
         systemStock = 0;
         hourlyVelocity = 6;
@@ -242,9 +241,8 @@ function buildInventory(zones: ShelfZone[]): InventoryRow[] {
   return rows;
 }
 
-function getScriptedGaps(): ScriptedGap[] {
+export function getScriptedGaps(): ScriptedGap[] {
   return [
-    // 09:20 phantom in Aisle 3 Atta
     {
       zoneId: "A3-L2",
       skuCode: "ATT-003",
@@ -252,8 +250,6 @@ function getScriptedGaps(): ScriptedGap[] {
       endTs: hourToTs(22, 0),
       gapRatio: 0.85,
     },
-    // 15:10 facing false positive — gap but sales ticking
-    // Start early enough that 3+ gap checks land before 15:10
     {
       zoneId: "A5-L1",
       skuCode: "BEV-001",
@@ -261,7 +257,6 @@ function getScriptedGaps(): ScriptedGap[] {
       endTs: hourToTs(16, 0),
       gapRatio: 0.78,
     },
-    // 17:45 peak tasks
     {
       zoneId: "A4-L1",
       skuCode: "RIC-001",
@@ -283,7 +278,6 @@ function getScriptedGaps(): ScriptedGap[] {
       endTs: hourToTs(22, 0),
       gapRatio: 0.81,
     },
-    // true_oos — dairy with zero stock
     {
       zoneId: "A1-L1",
       skuCode: "DAI-001",
@@ -296,11 +290,9 @@ function getScriptedGaps(): ScriptedGap[] {
 
 function getScriptedSales(): ScriptedSale[] {
   return [
-    // Sales for facing task at 15:10
     { zoneId: "A5-L1", skuCode: "BEV-001", ts: hourToTs(15, 5) },
     { zoneId: "A5-L1", skuCode: "BEV-001", ts: hourToTs(15, 18) },
     { zoneId: "A5-L1", skuCode: "BEV-001", ts: hourToTs(15, 25) },
-    // reverse_phantom sales — item selling but system says 0
     { zoneId: "A2-L1", skuCode: "SNK-002", ts: hourToTs(7, 45) },
     { zoneId: "A2-L1", skuCode: "SNK-002", ts: hourToTs(8, 20) },
     { zoneId: "A2-L1", skuCode: "SNK-002", ts: hourToTs(9, 15) },
@@ -310,7 +302,6 @@ function getScriptedSales(): ScriptedSale[] {
     { zoneId: "A2-L1", skuCode: "SNK-002", ts: hourToTs(14, 30) },
     { zoneId: "A2-L1", skuCode: "SNK-002", ts: hourToTs(15, 50) },
     { zoneId: "A2-L1", skuCode: "SNK-002", ts: hourToTs(17, 0) },
-    // Peak hour sales
     { zoneId: "A4-L1", skuCode: "RIC-001", ts: hourToTs(17, 30) },
     { zoneId: "A7-L1", skuCode: "HH-001", ts: hourToTs(17, 20) },
     { zoneId: "A8-L1", skuCode: "FRZ-001", ts: hourToTs(17, 35) },
@@ -345,10 +336,83 @@ function getCameraStatusAt(
   return status;
 }
 
-function generateSignals(
+function isInScriptedGapWindow(
+  zoneId: string,
+  ts: number,
+  scriptedGaps: ScriptedGap[]
+): boolean {
+  return scriptedGaps.some(
+    (g) => g.zoneId === zoneId && ts >= g.startTs && ts < g.endTs
+  );
+}
+
+/** Guaranteed demo signals — injected on top of messy background */
+function buildScriptedSignals(
+  rng: ReturnType<typeof createRng>,
+  zones: ShelfZone[],
+  scriptedGaps: ScriptedGap[],
+  scriptedCameras: ScriptedCamera[]
+): ShelfGapSignal[] {
+  const signals: ShelfGapSignal[] = [];
+
+  for (const gap of scriptedGaps) {
+    const zone = zones.find((z) => z.id === gap.zoneId);
+    const camId = zone?.cameraId ?? "cam-1";
+    let t = gap.startTs;
+    while (t < gap.endTs) {
+      const jitter = rng.int(-22, 38) * 1000;
+      const ts = t + jitter;
+      const status = getCameraStatusAt(camId, ts, scriptedCameras);
+      if (status === "offline") {
+        t += CHECK_INTERVAL_MS + rng.int(-20, 25) * 1000;
+        continue;
+      }
+
+      const degraded = status === "degraded";
+      signals.push({
+        zoneId: gap.zoneId,
+        ts,
+        gapRatio: Math.max(
+          0.62,
+          Math.min(0.95, gap.gapRatio + rng.float(-0.03, 0.03))
+        ),
+        confidence: Math.max(
+          0.68,
+          sampleConfidence(rng, gap.zoneId, degraded)
+        ),
+      });
+
+      t += CHECK_INTERVAL_MS + rng.int(-35, 45) * 1000;
+    }
+  }
+
+  return signals;
+}
+
+function mergeSignals(
+  background: ShelfGapSignal[],
+  scripted: ShelfGapSignal[]
+): ShelfGapSignal[] {
+  const scriptedZones = new Set(scripted.map((s) => s.zoneId));
+  const filtered = background.filter((bg) => {
+    if (!scriptedZones.has(bg.zoneId)) return true;
+    return !scripted.some(
+      (sc) => sc.zoneId === bg.zoneId && Math.abs(sc.ts - bg.ts) < 120_000
+    );
+  });
+  return [...filtered, ...scripted].sort((a, b) => a.ts - b.ts);
+}
+
+function generateBackgroundSignals(
   zones: ShelfZone[],
   seed: number
-): { signals: ShelfGapSignal[]; heartbeats: CameraHeartbeat[] } {
+): {
+  signals: ShelfGapSignal[];
+  heartbeats: CameraHeartbeat[];
+  dropRate: number;
+  expectedCount: number;
+  droppedCount: number;
+} {
   const rng = createRng(seed);
   const signals: ShelfGapSignal[] = [];
   const heartbeats: CameraHeartbeat[] = [];
@@ -357,84 +421,74 @@ function generateSignals(
 
   const dayStart = getDayStartTs();
   const dayEnd = getDayEndTs();
-  const dropRate = SIGNAL_DROP_RATE + rng.float(-0.03, 0.04);
+  const dropRate = sampleDropRate(rng);
 
   const cameraIds = [
-    "cam-1",
-    "cam-2",
-    "cam-3",
-    "cam-4",
-    "cam-5",
-    "cam-6",
-    "cam-7",
-    "cam-8",
+    "cam-1", "cam-2", "cam-3", "cam-4",
+    "cam-5", "cam-6", "cam-7", "cam-8",
   ];
 
-  // Generate check times with jitter
-  const checkTimes: number[] = [];
-  let t = dayStart;
-  while (t < dayEnd) {
-    const jitter = rng.int(-45, 45) * 1000;
-    checkTimes.push(t + jitter);
-    t += CHECK_INTERVAL_MS;
-  }
+  let expectedCount = 0;
+  let droppedCount = 0;
 
   for (const camId of cameraIds) {
-    for (const checkTs of checkTimes) {
-      if (checkTs < dayStart || checkTs >= dayEnd) continue;
+    const schedule = buildCameraSchedule(rng, dayStart, dayEnd);
+    const camZones = zones.filter((z) => z.cameraId === camId && z.covered);
 
-      const status = getCameraStatusAt(camId, checkTs, scriptedCameras);
-      heartbeats.push({ cameraId: camId, ts: checkTs, status });
+    for (const sampleTs of schedule) {
+      const status = getCameraStatusAt(camId, sampleTs, scriptedCameras);
 
-      const camZones = zones.filter((z) => z.cameraId === camId && z.covered);
+      // Camera goes quiet ~5% of the time (missed heartbeat + no signal)
+      const cameraQuiet =
+        camId !== "cam-4" && rng.chance(0.05);
+      if (cameraQuiet) continue;
+
+      heartbeats.push({ cameraId: camId, ts: sampleTs, status });
+
+      if (status === "offline") continue;
 
       for (const zone of camZones) {
-        const scripted = scriptedGaps.find(
-          (g) =>
-            g.zoneId === zone.id &&
-            checkTs >= g.startTs &&
-            checkTs < g.endTs
-        );
+        if (isInScriptedGapWindow(zone.id, sampleTs, scriptedGaps)) continue;
 
-        // Random signal drop — consume RNG always, but never drop scripted events
-        const dropped = rng.chance(dropRate);
-        if (!scripted && dropped) continue;
-        if (status === "offline") continue;
-
-        let gapRatio: number;
-        if (scripted) {
-          gapRatio = scripted.gapRatio + rng.float(-0.05, 0.05);
-        } else {
-          gapRatio = rng.chance(0.08)
-            ? rng.float(0.65, 0.9)
-            : rng.float(0, 0.3);
+        expectedCount++;
+        if (rng.chance(dropRate)) {
+          droppedCount++;
+          continue;
         }
 
-        let confidence: number;
-        if (LOW_CONFIDENCE_ZONES.includes(zone.id)) {
-          confidence = Math.min(0.55, rng.gaussian(0.45, 0.08));
-        } else {
-          confidence = Math.max(
-            0.3,
-            Math.min(0.95, rng.gaussian(0.72, 0.15))
-          );
-        }
-
-        if (status === "degraded") {
-          confidence *= 0.85;
+        const degraded = status === "degraded";
+        let gapRatio = sampleBackgroundGapRatio(rng);
+        // Occasional wrong reading on a healthy shelf
+        if (rng.chance(0.03)) {
+          gapRatio = rng.float(0.7, 0.92);
         }
 
         signals.push({
           zoneId: zone.id,
-          ts: checkTs,
+          ts: sampleTs,
           gapRatio: Math.max(0, Math.min(1, gapRatio)),
-          confidence: Math.max(0.2, Math.min(1, confidence)),
+          confidence: sampleConfidence(rng, zone.id, degraded),
         });
       }
     }
   }
 
-  return { signals, heartbeats };
+  return { signals, heartbeats, dropRate, expectedCount, droppedCount };
+}
+
+function generateSignals(
+  zones: ShelfZone[],
+  seed: number
+): { signals: ShelfGapSignal[]; heartbeats: CameraHeartbeat[] } {
+  const rng = createRng(seed + 999);
+  const scriptedGaps = getScriptedGaps();
+  const scriptedCameras = getScriptedCameras();
+
+  const bg = generateBackgroundSignals(zones, seed);
+  const scripted = buildScriptedSignals(rng, zones, scriptedGaps, scriptedCameras);
+  const signals = mergeSignals(bg.signals, scripted);
+
+  return { signals, heartbeats: bg.heartbeats };
 }
 
 function applyScriptedSales(inventory: InventoryRow[]): InventoryRow[] {
@@ -472,6 +526,33 @@ export function getLastSaleTs(
   return past[0]?.ts ?? fallback;
 }
 
+export type SignalGenerationMeta = {
+  dropRate: number;
+  expectedBackgroundSignals: number;
+  droppedBackgroundSignals: number;
+  scriptedSignalCount: number;
+  backgroundSignalCount: number;
+};
+
+export function getSignalGenerationMeta(seed: number): SignalGenerationMeta {
+  const zones = buildZones();
+  const rng = createRng(seed + 999);
+  const bg = generateBackgroundSignals(zones, seed);
+  const scripted = buildScriptedSignals(
+    rng,
+    zones,
+    getScriptedGaps(),
+    getScriptedCameras()
+  );
+  return {
+    dropRate: bg.dropRate,
+    expectedBackgroundSignals: bg.expectedCount,
+    droppedBackgroundSignals: bg.droppedCount,
+    scriptedSignalCount: scripted.length,
+    backgroundSignalCount: bg.signals.length,
+  };
+}
+
 export function generateStoreData(seed: number): StoreData {
   const zones = buildZones();
   const sales = getScriptedSales();
@@ -486,6 +567,49 @@ export function generateStoreData(seed: number): StoreData {
     inventory,
     sales,
     lowConfidenceZones: LOW_CONFIDENCE_ZONES,
+  };
+}
+
+/** Stats helper for sample-day report */
+export function analyzeSignalDay(
+  signals: ShelfGapSignal[],
+  heartbeats: CameraHeartbeat[],
+  zoneId: string,
+  windowStart: number,
+  windowEnd: number
+) {
+  const zoneSignals = signals.filter(
+    (s) => s.zoneId === zoneId && s.ts >= windowStart && s.ts <= windowEnd
+  );
+  const confs = zoneSignals.map((s) => s.confidence);
+  const gaps = zoneSignals.filter((s) => s.gapRatio > 0.6).length;
+  const avgConf =
+    confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
+  const minConf = confs.length > 0 ? Math.min(...confs) : 0;
+  const maxConf = confs.length > 0 ? Math.max(...confs) : 0;
+  const lowTail = confs.filter((c) => c < 0.55).length;
+
+  const camId = zoneId === "A6-L2" ? "cam-6" : zoneId === "A5-L1" ? "cam-5" : "cam-4";
+  const hb = heartbeats.filter(
+    (h) => h.cameraId === camId && h.ts >= windowStart && h.ts <= windowEnd
+  );
+
+  const timestamps = zoneSignals.map((s) => {
+    const d = new Date(s.ts);
+    const sec = d.getSeconds();
+    const onGrid = sec < 5 || sec > 55;
+    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}${onGrid ? "" : "*"}`;
+  });
+
+  return {
+    count: zoneSignals.length,
+    gaps,
+    avgConf,
+    minConf,
+    maxConf,
+    lowTail,
+    heartbeats: hb.length,
+    timestamps: timestamps.slice(0, 12),
   };
 }
 
