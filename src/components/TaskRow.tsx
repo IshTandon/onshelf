@@ -31,13 +31,17 @@ export function TaskRow({ task, exiting }: Props) {
   const isPredicted = task.mode === "predicted" || label === "Predicted";
   const mins = minutesOpen(task.openedTs, currentTs);
 
-  const borderColor = isPhantom
-    ? "border-l-urgent"
-    : isPredicted
-      ? "border-l-predicted"
+  const borderColor = isPredicted
+    ? "border-l-predicted"
+    : isPhantom
+      ? "border-l-urgent"
       : "border-l-transparent";
 
-  const bgColor = isPhantom ? "bg-red-50/50" : "";
+  const bgColor = isPredicted
+    ? "bg-neutral-50"
+    : isPhantom
+      ? "bg-red-50/50"
+      : "";
 
   return (
     <>

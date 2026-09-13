@@ -188,26 +188,83 @@ function computeTaskConfidence(
   return conf;
 }
 
-function buildPredictedSignals(
+function getOfflineSinceTs(
+  heartbeats: CameraHeartbeat[],
+  cameraId: string,
+  currentTs: number
+): number | null {
+  const relevant = heartbeats
+    .filter((h) => h.cameraId === cameraId && h.ts <= currentTs)
+    .sort((a, b) => a.ts - b.ts);
+
+  let offlineSince: number | null = null;
+  for (const hb of relevant) {
+    if (hb.status === "offline") {
+      if (offlineSince === null) offlineSince = hb.ts;
+    } else {
+      offlineSince = null;
+    }
+  }
+  return offlineSince;
+}
+
+function getPriorGapSightings(
+  signals: ShelfGapSignal[],
+  zoneId: string,
+  beforeTs: number,
+  lookbackMs = 4 * 60 * 60 * 1000
+): { hadSustainedGap: boolean; sightings: { seen: number; checks: number } } {
+  const windowStart = beforeTs - lookbackMs;
+  const byTs = new Map<number, ShelfGapSignal>();
+  for (const s of signals) {
+    if (s.zoneId !== zoneId || s.ts < windowStart || s.ts >= beforeTs) continue;
+    const existing = byTs.get(s.ts);
+    if (!existing || s.gapRatio > existing.gapRatio) {
+      byTs.set(s.ts, s);
+    }
+  }
+  const checks = Array.from(byTs.values()).sort((a, b) => b.ts - a.ts);
+  const recent = checks.slice(0, SIGHTING_WINDOW);
+  const seen = recent.filter((s) => s.gapRatio > GAP_THRESHOLD).length;
+  const totalSeen = checks.filter((s) => s.gapRatio > GAP_THRESHOLD).length;
+  return {
+    hadSustainedGap:
+      totalSeen >= MIN_SIGHTINGS &&
+      recent.length >= MIN_SIGHTINGS &&
+      seen >= MIN_SIGHTINGS,
+    sightings: { seen, checks: recent.length },
+  };
+}
+
+/** Prediction when camera is silent — list must not go blank */
+function buildOfflinePrediction(
   inv: InventoryRow,
   zoneId: string,
   currentTs: number,
-  lastSignalTs: number
-): ShelfGapSignal[] {
-  if (!inv.hourlyVelocity || inv.systemStock <= 0) return [];
-  const hoursSince = (currentTs - lastSignalTs) / (60 * 60 * 1000);
-  const estimatedRemaining = inv.systemStock - inv.hourlyVelocity * hoursSince;
-  if (estimatedRemaining > inv.systemStock * 0.3) return [];
+  offlineSinceTs: number,
+  hadPriorGap: boolean,
+  lastGapSignal: ShelfGapSignal | undefined
+): ShelfGapSignal | null {
+  if (hadPriorGap) {
+    const gapRatio = Math.max(
+      GAP_THRESHOLD + 0.05,
+      lastGapSignal?.gapRatio ?? 0.75
+    );
+    return { zoneId, ts: currentTs, gapRatio, confidence: 0.4 };
+  }
 
-  const gapRatio = Math.min(0.9, 1 - estimatedRemaining / (inv.systemStock || 1));
-  return [
-    {
-      zoneId,
-      ts: currentTs,
-      gapRatio: Math.max(0.65, gapRatio),
-      confidence: 0.4,
-    },
-  ];
+  if (inv.systemStock <= 0 || inv.hourlyVelocity <= 0) return null;
+
+  const hoursOffline = (currentTs - offlineSinceTs) / (60 * 60 * 1000);
+  const estimatedRemaining =
+    inv.systemStock - inv.hourlyVelocity * (hoursOffline + 1);
+  if (estimatedRemaining > inv.systemStock * 0.35) return null;
+
+  const gapRatio = Math.min(
+    0.9,
+    Math.max(0.65, 1 - estimatedRemaining / inv.systemStock)
+  );
+  return { zoneId, ts: currentTs, gapRatio, confidence: 0.4 };
 }
 
 export interface ClassifyInput {
@@ -270,34 +327,42 @@ export function classifyTasks(input: ClassifyInput): Task[] {
 
       let zoneSignals = getSignalsInWindow(signals, zone.id, currentTs);
       let mode: "observed" | "predicted" = "observed";
+      let sightings = countSightings(signals, zone.id, currentTs);
+      let sustained = hasSustainedGap(signals, zone.id, currentTs).sustained;
+      let offlinePredicted = false;
 
       if (isOffline) {
         mode = "predicted";
-        const lastReal = signals
-          .filter((s) => s.zoneId === zone.id && s.ts <= currentTs)
+        const offlineSince =
+          getOfflineSinceTs(heartbeats, zone.cameraId, currentTs) ?? currentTs;
+        const prior = getPriorGapSightings(signals, zone.id, offlineSince);
+        const lastGap = signals
+          .filter(
+            (s) =>
+              s.zoneId === zone.id &&
+              s.gapRatio > GAP_THRESHOLD &&
+              s.ts < offlineSince
+          )
           .sort((a, b) => b.ts - a.ts)[0];
-        const predicted = buildPredictedSignals(
+
+        const prediction = buildOfflinePrediction(
           inv,
           zone.id,
           currentTs,
-          lastReal?.ts ?? currentTs - WINDOW_MS
+          offlineSince,
+          prior.hadSustainedGap,
+          lastGap
         );
-        if (predicted.length > 0) {
-          zoneSignals = predicted;
+
+        if (prediction) {
+          zoneSignals = [prediction];
+          offlinePredicted = prediction.gapRatio > GAP_THRESHOLD;
+          sightings =
+            prior.sightings.checks > 0
+              ? prior.sightings
+              : { seen: MIN_SIGHTINGS, checks: SIGHTING_WINDOW };
         }
       }
-
-      const checkSignals = isOffline ? zoneSignals : signals;
-      const { sustained, sightings } = hasSustainedGap(
-        checkSignals,
-        zone.id,
-        currentTs
-      );
-
-      const offlinePredicted =
-        isOffline &&
-        zoneSignals.length > 0 &&
-        zoneSignals.some((s) => s.gapRatio > GAP_THRESHOLD);
 
       const kind = classifyKind(
         sustained || offlinePredicted,
@@ -446,6 +511,11 @@ export function getDisagreementSentence(
   const sku = getSku(zones, task.zoneId, task.skuCode);
   const { seen, checks } = task.sightings;
   const stock = task.evidence.systemStock;
+
+  if (task.mode === "predicted") {
+    const stock = task.evidence.systemStock;
+    return `Camera offline. Estimating from ${stock} units in system and sales velocity — shelf likely still empty.`;
+  }
 
   if (task.kind === "reverse_phantom") {
     return `System shows 0 units but sales are still happening. Shelf looks stocked.`;

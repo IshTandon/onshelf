@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateStoreData } from "./generator";
+import { generateStoreData, getCameraStatusAtTs } from "./generator";
 import {
   classifyTasks,
   collapseFacingTasks,
@@ -40,6 +40,20 @@ describe("scripted classification", () => {
     const task = openTaskAt(ts, "A5-L1", "BEV-001");
     expect(task).toBeDefined();
     expect(task!.kind).toBe("facing");
+  });
+
+  it("14:00 cam-4 offline keeps A3-L2 on list in predicted mode", () => {
+    const ts = hourToTs(14, 0);
+    const storeData = generateStoreData(SEED);
+    expect(getCameraStatusAtTs(storeData.heartbeats, "cam-4", ts)).toBe(
+      "offline"
+    );
+
+    const task = openTaskAt(ts, "A3-L2", "ATT-003");
+    expect(task).toBeDefined();
+    expect(task!.mode).toBe("predicted");
+    expect(task!.confidence).toBeLessThanOrEqual(0.5);
+    expect(task!.evidence.cameraStatus).toBe("offline");
   });
 
   it("09:26 does not open a facing task in Aisle 3", () => {
