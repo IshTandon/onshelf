@@ -417,7 +417,16 @@ export function classifyTasks(input: ClassifyInput): Task[] {
         signals: zoneSignals,
         cameraStatus,
         systemStock: inv.systemStock,
-        lastSaleTs: inv.lastSaleTs,
+        // The Evidence panel cites "Last sale" as justification for the task, so it
+        // has to be the real most recent sale, not the seeded morning value — the
+        // rules already read the events this way.
+        lastSaleTs: getLastSaleTs(
+          storeData.sales,
+          zone.id,
+          sku.code,
+          currentTs,
+          inv.lastSaleTs
+        ),
       };
 
       handledKeys.add(key);
