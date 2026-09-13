@@ -162,9 +162,67 @@ commit→prompt table that this record is built from.
 
 ---
 
-## Session totals
+## Closing out the session — 22:26 to 22:50
 
-- 10 user turns, ~86 minutes wall clock
-- 9 commits, each traceable to the prompt that caused it
-- 16 tests passing at close, including the six-test demo timeline suite
-- lint clean, static export building to `out/`
+Three commits after the last logged turn, from short instructions not preserved verbatim:
+the session record itself, a CI workflow running lint, tests and build on every push, and the
+full text of the opening build spec committed so the appendix's citation of it resolves.
+
+**Commits:** `docs: cursor session record — verbatim prompts, agent responses, commit map` ·
+`ci: lint, test and build on every push and pull request` ·
+`docs: the full initial build spec — the opening prompt of the session`
+
+---
+
+## Review pass — 23:23 to 02:49
+
+A pass over the finished build and the written documents, checking the claims in the
+submission against the code that is supposed to demonstrate them. Seven commits. What it found:
+
+**The clock was wrong for everyone outside UTC.** `BASE_DATE` was `new Date(2026, 8, 13)` —
+local midnight on whichever machine evaluated it. Vercel prerenders the static export in UTC,
+so a viewer in IST saw the trading day shifted by +05:30: the scrubber labels read 06:00 and
+22:00 while the reachable range was 11:30 to 03:30, and 09:20, 13:30 and 15:10 could not be
+reached at all. A grocery day appeared to run past midnight. The day is now built on a fixed
+UTC base; tests pin the absolute instants and pass under four timezones. The original 16 tests
+could not catch this — both halves of the code agreed locally and only diverged across the
+prerender/view boundary.
+
+**The Evidence panel contradicted itself.** It cites "Last sale" as justification for the task
+but read the seeded inventory field rather than the sale events the rules use, so a facing task
+reading "sales are still happening" could show a morning timestamp beside a current heartbeat.
+
+**Resolutions leaked backwards.** Dismissing a task at 17:45 and rewinding the scrubber to
+09:20 left it missing from a list it had not yet been removed from, so the store read as
+healthier in the morning than it was. Lifecycle entries now carry the time they were closed.
+
+**The correction did not match section 1.** The sheet read "System stock will be set to 0" over
+a "Set stock to 0" button — a direct ledger write, contradicting the claim that corrections
+propose rather than overwrite, and there was nowhere to undo one. The sheet now states the
+cycle-count adjustment, the scoped value and the expiring suspension, and Task history at the
+foot of the gaps list allows a correction to be withdrawn for four hours, which restores the
+stock and lets the shelf be reassessed.
+
+**Housekeeping.** A README and licence, since the repository had neither; the scratch trace and
+a build script carrying an absolute path removed; the raw agent transcript dropped in favour of
+this record, which carries the same prompts in a readable form; and the two submitted PDFs plus
+the markdown they build from committed under `docs/`.
+
+**Commits:** `fix: build the simulated day in UTC…` · `fix: show the real most recent sale in
+task evidence` · `fix: a resolution applies from when it was made, not before it` ·
+`feat: task history with a four-hour withdrawal for corrections` ·
+`docs: add the README and an MIT licence` · `chore: drop scratch files and the raw transcript
+dump` · `docs: add the submitted documents and the source they build from`
+
+One claim in section 1 is still not demonstrated: **failed writes stay visible**. There is no
+inventory service in a client-side prototype for a write to fail against, and `docs/README.md`
+says so rather than leaving it to be discovered.
+
+---
+
+## Totals
+
+- 10 logged turns in the build session, ~86 minutes wall clock
+- 19 commits: 9 from the logged turns, 3 closing the session, 7 from the review pass
+- 24 tests passing, lint clean, static export building to `out/`
+- every commit traceable to the work that caused it
