@@ -35,3 +35,7 @@ yarn-error.log*
 *.tsbuildinfo
 test-output.txt
 run-checks.sh
+
+# scratch
+debug-*.mjs
+.run-commands.sh

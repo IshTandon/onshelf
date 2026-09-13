@@ -1,13 +1,10 @@
 # Cursor session — conversation record
 
 Session `3306d82f-5eab-4c4f-8921-b06950c89c26`, run in the Cursor Agent CLI on
-13 September 2026, 21:04–22:30 IST. The full machine-readable transcript is
-`session-transcript.jsonl` in this directory (175 entries: 11 user turns, agent
-turns, tool calls and file edits as they happened).
+13 September 2026, 21:04–22:30 IST.
 
-The exchange below is the human-readable form of the same session: every user
-prompt verbatim, the agent's response summarised to its decisions, and the commit
-each exchange produced.
+This is the record of that session: every user prompt verbatim, the agent's
+response summarised to its decisions, and the commit each exchange produced.
 
 ---
 
