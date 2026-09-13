@@ -198,7 +198,7 @@ export function buildSampleDayReport(seed = SEED): string {
 
 function verifyScriptedEvents(storeData: ReturnType<typeof generateStoreData>): string[] {
   const checks = [
-    { label: "09:26 phantom ATT-003", ts: ht(9, 26), zone: "A3-L2", sku: "ATT-003", kind: "phantom_suspected" as const },
+    { label: "09:20 phantom ATT-003", ts: ht(9, 20), zone: "A3-L2", sku: "ATT-003", kind: "phantom_suspected" as const },
     { label: "15:10 facing BEV-001", ts: ht(15, 10), zone: "A5-L1", sku: "BEV-001", kind: "facing" as const },
     { label: "17:45 peak RIC-001", ts: ht(17, 45), zone: "A4-L1", sku: "RIC-001", kind: null },
   ];

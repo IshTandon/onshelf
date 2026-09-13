@@ -246,7 +246,7 @@ export function getScriptedGaps(): ScriptedGap[] {
     {
       zoneId: "A3-L2",
       skuCode: "ATT-003",
-      startTs: hourToTs(9, 14),
+      startTs: hourToTs(9, 8),
       endTs: hourToTs(22, 0),
       gapRatio: 0.85,
     },
@@ -260,21 +260,21 @@ export function getScriptedGaps(): ScriptedGap[] {
     {
       zoneId: "A4-L1",
       skuCode: "RIC-001",
-      startTs: hourToTs(17, 36),
+      startTs: hourToTs(17, 33),
       endTs: hourToTs(22, 0),
       gapRatio: 0.78,
     },
     {
       zoneId: "A7-L1",
       skuCode: "HH-001",
-      startTs: hourToTs(17, 39),
+      startTs: hourToTs(17, 33),
       endTs: hourToTs(22, 0),
       gapRatio: 0.68,
     },
     {
       zoneId: "A8-L1",
       skuCode: "FRZ-001",
-      startTs: hourToTs(17, 42),
+      startTs: hourToTs(17, 33),
       endTs: hourToTs(22, 0),
       gapRatio: 0.81,
     },
@@ -369,6 +369,10 @@ function buildScriptedSignals(
       }
 
       const degraded = status === "degraded";
+      const sampled = sampleConfidence(rng, gap.zoneId, degraded);
+      const confidence = degraded
+        ? Math.min(0.74, Math.max(0.55, sampled))
+        : Math.max(0.78, sampled);
       signals.push({
         zoneId: gap.zoneId,
         ts,
@@ -376,10 +380,7 @@ function buildScriptedSignals(
           0.62,
           Math.min(0.95, gap.gapRatio + rng.float(-0.03, 0.03))
         ),
-        confidence: Math.max(
-          0.68,
-          sampleConfidence(rng, gap.zoneId, degraded)
-        ),
+        confidence,
       });
 
       t += CHECK_INTERVAL_MS + rng.int(-35, 45) * 1000;
@@ -387,6 +388,38 @@ function buildScriptedSignals(
   }
 
   return signals;
+}
+
+/** First reading after camera recovery so the 19:00 demo has live signals */
+function injectRecoverySignals(
+  signals: ShelfGapSignal[],
+  zones: ShelfZone[],
+  scriptedGaps: ScriptedGap[],
+  rng: ReturnType<typeof createRng>
+) {
+  for (const cam of getScriptedCameras()) {
+    let prev: "ok" | "degraded" | "offline" = "ok";
+    for (const ev of cam.events) {
+      if (prev === "offline" && ev.status !== "offline") {
+        const zoneIds = new Set(
+          zones
+            .filter((z) => z.cameraId === cam.cameraId)
+            .map((z) => z.id)
+        );
+        for (const gap of scriptedGaps) {
+          if (!zoneIds.has(gap.zoneId)) continue;
+          if (ev.ts < gap.startTs || ev.ts >= gap.endTs) continue;
+          signals.push({
+            zoneId: gap.zoneId,
+            ts: ev.ts,
+            gapRatio: Math.max(0.65, gap.gapRatio),
+            confidence: 0.8,
+          });
+        }
+      }
+      prev = ev.status;
+    }
+  }
 }
 
 function mergeSignals(
@@ -486,6 +519,7 @@ function generateSignals(
 
   const bg = generateBackgroundSignals(zones, seed);
   const scripted = buildScriptedSignals(rng, zones, scriptedGaps, scriptedCameras);
+  injectRecoverySignals(scripted, zones, scriptedGaps, rng);
   const signals = mergeSignals(bg.signals, scripted);
 
   return { signals, heartbeats: bg.heartbeats };
@@ -538,12 +572,14 @@ export function getSignalGenerationMeta(seed: number): SignalGenerationMeta {
   const zones = buildZones();
   const rng = createRng(seed + 999);
   const bg = generateBackgroundSignals(zones, seed);
+  const scriptedGaps = getScriptedGaps();
   const scripted = buildScriptedSignals(
     rng,
     zones,
-    getScriptedGaps(),
+    scriptedGaps,
     getScriptedCameras()
   );
+  injectRecoverySignals(scripted, zones, scriptedGaps, rng);
   return {
     dropRate: bg.dropRate,
     expectedBackgroundSignals: bg.expectedCount,
@@ -652,10 +688,61 @@ export function getCameraStatusAtTs(
   cameraId: string,
   ts: number
 ): "ok" | "degraded" | "offline" {
+  const scripted = getScriptedCameras();
+  if (scripted.some((s) => s.cameraId === cameraId)) {
+    return getCameraStatusAt(cameraId, ts, scripted);
+  }
   const relevant = heartbeats
     .filter((h) => h.cameraId === cameraId && h.ts <= ts)
     .sort((a, b) => b.ts - a.ts);
   return relevant[0]?.status ?? "ok";
+}
+
+/** Most recent offline period that has ended by ts */
+export function getCompletedOfflinePeriod(
+  cameraId: string,
+  ts: number
+): { start: number; end: number } | null {
+  const script = getScriptedCameras().find((s) => s.cameraId === cameraId);
+  if (!script) return null;
+
+  let offlineStart: number | null = null;
+  let completed: { start: number; end: number } | null = null;
+
+  for (const ev of script.events) {
+    if (ev.ts > ts) break;
+    if (ev.status === "offline") {
+      if (offlineStart === null) offlineStart = ev.ts;
+    } else if (offlineStart !== null) {
+      completed = { start: offlineStart, end: ev.ts };
+      offlineStart = null;
+    }
+  }
+
+  return completed;
+}
+
+/** When a scripted camera went offline (authoritative for demo transitions) */
+export function getOfflineSinceTsForCamera(
+  cameraId: string,
+  ts: number
+): number | null {
+  const script = getScriptedCameras().find((s) => s.cameraId === cameraId);
+  if (!script) return null;
+
+  let offlineSince: number | null = null;
+  for (const ev of script.events) {
+    if (ev.ts > ts) break;
+    if (ev.status === "offline") {
+      if (offlineSince === null) offlineSince = ev.ts;
+    } else {
+      offlineSince = null;
+    }
+  }
+
+  return getCameraStatusAt(cameraId, ts, getScriptedCameras()) === "offline"
+    ? offlineSince
+    : null;
 }
 
 export function getLastHeartbeat(

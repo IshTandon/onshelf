@@ -3,6 +3,7 @@ import {
   generateStoreData,
   getSignalGenerationMeta,
   analyzeSignalDay,
+  getScriptedGaps,
 } from "./generator";
 import {
   classifyTasks,
@@ -14,10 +15,20 @@ import { getDayStartTs, getDayEndTs, hourToTs } from "./time";
 
 const SEED = 42;
 
+function isBackgroundSignal(
+  s: { zoneId: string; ts: number },
+  gaps = getScriptedGaps()
+) {
+  return !gaps.some(
+    (g) => g.zoneId === s.zoneId && s.ts >= g.startTs && s.ts < g.endTs
+  );
+}
+
 describe("messy signal generator", () => {
   const storeData = generateStoreData(SEED);
   const meta = getSignalGenerationMeta(SEED);
-  const confs = storeData.signals.map((s) => s.confidence);
+  const background = storeData.signals.filter((s) => isBackgroundSignal(s));
+  const confs = background.map((s) => s.confidence);
 
   it("drops 5–12% of background signals", () => {
     const rate = meta.droppedBackgroundSignals / meta.expectedBackgroundSignals;
@@ -26,6 +37,7 @@ describe("messy signal generator", () => {
   });
 
   it("has a long low-confidence tail, not clustered at 0.95", () => {
+    expect(confs.length).toBeGreaterThan(0);
     const lowTail = confs.filter((c) => c < 0.55).length;
     const highCluster = confs.filter((c) => c > 0.85).length;
     expect(lowTail / confs.length).toBeGreaterThan(0.08);

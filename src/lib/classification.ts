@@ -16,6 +16,8 @@ import {
   getInventoryRow,
   getCameraStatusAtTs,
   getLastSaleTs,
+  getOfflineSinceTsForCamera,
+  getCompletedOfflinePeriod,
 } from "./generator";
 
 const WINDOW_MS = 15 * 60 * 1000;
@@ -188,26 +190,6 @@ function computeTaskConfidence(
   return conf;
 }
 
-function getOfflineSinceTs(
-  heartbeats: CameraHeartbeat[],
-  cameraId: string,
-  currentTs: number
-): number | null {
-  const relevant = heartbeats
-    .filter((h) => h.cameraId === cameraId && h.ts <= currentTs)
-    .sort((a, b) => a.ts - b.ts);
-
-  let offlineSince: number | null = null;
-  for (const hb of relevant) {
-    if (hb.status === "offline") {
-      if (offlineSince === null) offlineSince = hb.ts;
-    } else {
-      offlineSince = null;
-    }
-  }
-  return offlineSince;
-}
-
 function getPriorGapSightings(
   signals: ShelfGapSignal[],
   zoneId: string,
@@ -334,7 +316,7 @@ export function classifyTasks(input: ClassifyInput): Task[] {
       if (isOffline) {
         mode = "predicted";
         const offlineSince =
-          getOfflineSinceTs(heartbeats, zone.cameraId, currentTs) ?? currentTs;
+          getOfflineSinceTsForCamera(zone.cameraId, currentTs) ?? currentTs;
         const prior = getPriorGapSightings(signals, zone.id, offlineSince);
         const lastGap = signals
           .filter(
@@ -361,6 +343,52 @@ export function classifyTasks(input: ClassifyInput): Task[] {
             prior.sightings.checks > 0
               ? prior.sightings
               : { seen: MIN_SIGHTINGS, checks: SIGHTING_WINDOW };
+        }
+      } else if (cameraStatus === "ok") {
+        const offlinePeriod = getCompletedOfflinePeriod(
+          zone.cameraId,
+          currentTs
+        );
+        const inRecoveryWindow =
+          offlinePeriod !== null &&
+          currentTs - offlinePeriod.end <= 30 * 60 * 1000;
+
+        if (inRecoveryWindow && offlinePeriod) {
+          if (!sustained) {
+            const prior = getPriorGapSightings(
+              signals,
+              zone.id,
+              offlinePeriod.start
+            );
+            if (prior.hadSustainedGap) {
+              sustained = true;
+              sightings = prior.sightings;
+            }
+          }
+          if (zoneSignals.length === 0) {
+            const recovery = signals
+              .filter(
+                (s) =>
+                  s.zoneId === zone.id &&
+                  s.ts >= offlinePeriod.end &&
+                  s.ts <= currentTs
+              )
+              .sort((a, b) => b.ts - a.ts)[0];
+            const lastBefore = signals
+              .filter(
+                (s) =>
+                  s.zoneId === zone.id && s.ts < offlinePeriod.start
+              )
+              .sort((a, b) => b.ts - a.ts)[0];
+            zoneSignals = [
+              recovery ?? {
+                zoneId: zone.id,
+                ts: currentTs,
+                gapRatio: lastBefore?.gapRatio ?? 0.85,
+                confidence: 0.8,
+              },
+            ];
+          }
         }
       }
 
