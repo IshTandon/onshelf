@@ -1,0 +1,64 @@
+@page {
+  size: A4;
+  margin: 20mm 18mm 18mm 18mm;
+  @bottom-center {
+    content: "OnShelf · Fynd PGM take-home · Page " counter(page);
+    font-family: Inter, Helvetica, Arial, sans-serif;
+    font-size: 7.5pt; color: #8a8a8a; letter-spacing: .02em;
+  }
+}
+@page :first { margin-top: 16mm; }
+html { font-size: 10.5pt; }
+body {
+  font-family: Inter, Helvetica, Arial, sans-serif;
+  font-size: 10.5pt; line-height: 1.42; color: #16181d;
+  hyphens: none; text-align: left;
+}
+.masthead { margin: 0 0 6mm 0; }
+.masthead .title { display:block; font-size:27pt; font-weight:700; letter-spacing:-.022em; line-height:1.05; margin:0 0 2.5mm 0; }
+.masthead .subtitle { display:block; font-size:11pt; color:#4a4f57; line-height:1.4; margin:0 0 1.5mm 0; }
+.masthead .byline { display:block; font-size:8.5pt; color:#8a8a8a; letter-spacing:.01em; }
+.epigraph { margin:0 0 7mm 0; padding:0 0 0 4.5mm; border-left:2pt solid #16181d; font-size:10pt; line-height:1.5; color:#3a3f47; }
+.epigraph p { margin:0; }
+
+/* D1: block headings, never inline */
+h1, h2, h3 {
+  display: block; float: none; clear: both; width: auto;
+  page-break-inside: avoid; break-inside: avoid;
+  page-break-after: avoid; break-after: avoid-page;
+}
+h1 {
+  font-size:19pt; font-weight:700; letter-spacing:-.018em; line-height:1.15;
+  margin: 0 0 3.0mm 0; padding: 0 0 1.5mm 0;
+  border-bottom: 1.2pt solid #16181d; break-before: page;
+}
+h1:first-of-type { break-before: auto; }
+h2 { font-size:11.5pt; font-weight:700; letter-spacing:-.008em; margin: 3.8mm 0 1.3mm 0; }
+h3 { font-size:10.5pt; font-weight:700; margin: 5mm 0 1.5mm 0; }
+p { margin: 0 0 2.1mm 0; orphans: 2; widows: 2; }
+strong { font-weight: 700; color: #000; }
+
+/* D2: inline UI label, zero lateral padding */
+.ui { font-weight:700; color:#000; border-bottom:1.1pt solid #b9bcc2; white-space:nowrap; }
+.assume { color: #8a8a8a; }
+.src { color: #3f6d54; font-weight: 700; }
+code { font-family:"SF Mono", Menlo, Consolas, monospace; font-size:9.2pt; font-weight:600; color:#000; }
+
+/* D3: real links */
+a { color:#1a4f8a; text-decoration:none; border-bottom:.6pt solid #a9bfd6; }
+
+table {
+  width:100%; border-collapse:collapse; margin:2.2mm 0 2.8mm 0;
+  font-size:8.15pt; line-height:1.27; page-break-inside:auto;
+}
+thead { display: table-header-group; }
+th {
+  text-align:left; font-weight:700; font-size:8.6pt; letter-spacing:.04em;
+  text-transform:uppercase; color:#5a5f67; border-bottom:1pt solid #16181d;
+  padding: 0 2.4mm 1.0mm 0; vertical-align: bottom;
+}
+td { padding: 0.78mm 2.3mm 0.78mm 0; border-bottom:.5pt solid #e2e4e8; vertical-align: top; }
+tr { page-break-inside: avoid; break-inside: avoid; }
+td:last-child, th:last-child { padding-right: 0; }
+table tbody tr td:first-child { width: 24%; }
+table thead th:first-child { width: 14%; }

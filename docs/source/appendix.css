@@ -1,0 +1,17 @@
+@page { @bottom-center { content: "OnShelf — Appendix · Page " counter(page); } }
+h1 { break-before: auto; }
+h1 + .card { margin-top: 4mm; }
+.card {
+  border:.6pt solid #d9dbe0; border-left:2pt solid #16181d;
+  padding:3.0mm 4mm 1.4mm 4mm; margin:0 0 3.0mm 0;
+  page-break-inside: avoid; break-inside: avoid;
+}
+.card h3 { margin:0 0 2.0mm 0; font-size:10.5pt; font-weight:700; letter-spacing:-.01em; }
+.card p { margin:0 0 1.8mm 0; font-size:9.4pt; line-height:1.45; }
+/* D4: label run-ins get real separation from their value */
+.lab {
+  display:inline-block; margin-right:1.6mm; font-size:7.4pt; font-weight:700;
+  letter-spacing:.085em; text-transform:uppercase; color:#6a6f78;
+}
+.wordcount { margin:6mm 0 0 0; font-size:8.5pt; color:#8a8a8a; }
+.wordcount p { margin:0; }

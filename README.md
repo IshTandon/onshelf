@@ -16,6 +16,10 @@ reversal, and the degradation behaviour when a camera goes quiet.
 
 **Live:** https://onshelf-omega.vercel.app/
 
+**The written submission** is in [`docs/`](docs) — the strategy note, metrics, cost and privacy
+sections, the decision record, and the appendix covering how the work was done. The prompt
+record is in [`prompt-record/`](prompt-record).
+
 ## The four screens
 
 - **Today's gaps** — the ranked task list, sorted by rupees at risk per hour. Each row states
@@ -96,5 +100,6 @@ src/lib/          generator, classification, reversal, time — all pure, all te
 src/hooks/        useSimulation — clock, task lifecycle, corrections, history
 src/components/   scrubber, task row, correction sheet, task history, honesty strips
 src/app/          the four routes
+docs/             the submitted PDFs and the markdown they are built from
 prompt-record/    the prompts this was built from
 ```

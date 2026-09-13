@@ -39,3 +39,6 @@ run-checks.sh
 # scratch
 debug-*.mjs
 .run-commands.sh
+
+# intermediate HTML from the document build
+docs/source/*.html
