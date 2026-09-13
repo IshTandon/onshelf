@@ -33,3 +33,5 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+test-output.txt
+run-checks.sh
