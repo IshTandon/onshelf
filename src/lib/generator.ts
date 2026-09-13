@@ -632,9 +632,9 @@ export function analyzeSignalDay(
 
   const timestamps = zoneSignals.map((s) => {
     const d = new Date(s.ts);
-    const sec = d.getSeconds();
+    const sec = d.getUTCSeconds();
     const onGrid = sec < 5 || sec > 55;
-    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}${onGrid ? "" : "*"}`;
+    return `${d.getUTCHours().toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}${onGrid ? "" : "*"}`;
   });
 
   return {
